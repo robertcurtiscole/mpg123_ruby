@@ -5,11 +5,9 @@
 #include <stdio.h>
 #include <strings.h>
 #include <mpg123.h>
-//#include <mpg123app.h>
-//#include "common.h"
-//#include "buffer.h"
-//#include "genre.h"
-//#include "playlist.h"
+
+#include "pthread.h"
+
 #define MODE_STOPPED 0
 #define MODE_PLAYING 1
 #define MODE_PAUSED 2
@@ -36,10 +34,10 @@ static void generic_sendv1(mpg123_id3v1 *v1, const char *prefix)
 
   for(i=0;i<124; ++i) if(info[i] == 0) info[i] = ' ';
   info[i] = 0;
-  generic_sendmsg("%s ID3:%s%s", prefix, info, (v1->genre<=genre_count) ? genre_table[v1->genre] : "Unknown");
+  //generic_sendmsg("%s ID3:%s%s", prefix, info, (v1->genre<=genre_count) ? genre_table[v1->genre] : "Unknown");
   generic_sendmsg("%s ID3.genre:%i", prefix, v1->genre);
   if(v1->comment[28] == 0 && v1->comment[29] != 0)
-  generic_sendmsg("%s ID3.track:%i", prefix, (unsigned char)v1->comment[29]);
+    generic_sendmsg("%s ID3.track:%i", prefix, (unsigned char)v1->comment[29]);
 }
 
 static void generic_sendinfoid3(mpg123_handle *mh)
@@ -72,12 +70,43 @@ static VALUE rubyClassMpg123;
 typedef struct mpg123_globals {
   mpg123_handle   *mh;
   int              mode;  //stopped, playing, paused
+  pthread_t       playerThread;
 } sMPG123Globals;
+
+
+/* this function is run by the second thread */
+void *PlayerThread(void *gPtr)
+{
+
+/* increment x to 100 */
+  sMPG123Globals   *p123Globals = (sMPG123Globals *) gPtr;
+  int i = 0;
+  for (i = 0; i < 100; i++) {
+    sleep(1);
+    p123Globals->mode++;
+    if (0 == (i % 10)) {
+      printf("PlayerThread count %d\n", p123Globals->mode);
+      printf("PT:p123Globals = 0x%08x\n", (unsigned int) p123Globals);
+    }
+  }
+  printf("PlayerThread finished\n");
+
+  /* the function must return something - NULL will do */
+  return NULL;
+
+}
 
 static void mpg123Ruby_free( void *p)
 {
+  sMPG123Globals   *p123Globals = (sMPG123Globals *) p;
   printf("mpg123Ruby_free\n");
   // close and free the handle?  I think this is sMPG123Globals *ptr
+  // kill thread
+  if ( p123Globals != NULL) {
+    if (p123Globals->playerThread != 0) {
+
+    }
+  }
 }
 
 VALUE mpg123Ruby_alloc(VALUE klass) {
@@ -88,6 +117,12 @@ VALUE mpg123Ruby_alloc(VALUE klass) {
 	printf("new!\n");
   // wrap the C structure in Ruby
   obj = Data_Make_Struct(klass, sMPG123Globals, 0, mpg123Ruby_free, p123Globals);
+
+  // start a thread
+  /* create a second thread which executes inc_x(&x) */
+  if(pthread_create(&p123Globals->playerThread, NULL, PlayerThread, p123Globals)) {
+    fprintf(stderr, "Error creating thread\n");
+  }
 
   result = mpg123_init();
   if(result == MPG123_OK)
@@ -145,7 +180,7 @@ VALUE mpg123Ruby_load(VALUE self, VALUE url)
   mpg123_seek(p123Globals->mh, 0, SEEK_SET); /* This finds ID3v2 at beginning. */
   if(mpg123_meta_check(p123Globals->mh) & MPG123_NEW_ID3)
   {
-    generic_sendinfoid3(p123Globals->mh));
+    generic_sendinfoid3(p123Globals->mh);
   }
   //else generic_sendinfo(arg);
 
@@ -156,7 +191,7 @@ VALUE mpg123Ruby_load(VALUE self, VALUE url)
   //init = 1;
   //generic_sendmsg(mode == MODE_PAUSED ? "P 1" : "P 2");
 
-  return Qnil;    // what should success look like?
+  return INT2NUM(p123Globals->mode);    // what should success look like?
 }
 
 VALUE mpg123Ruby_pause(VALUE self, VALUE url)
@@ -171,6 +206,7 @@ VALUE mpg123Ruby_pause(VALUE self, VALUE url)
     return Qnil;
 
   printf("mpg123_pause before %d\n", p123Globals->mode);
+  printf("p123Globals = 0x%08x\n", (unsigned int) p123Globals);
 
   // if not playing, start
   if (p123Globals->mode != MODE_PLAYING) {
@@ -180,7 +216,7 @@ VALUE mpg123Ruby_pause(VALUE self, VALUE url)
     
   }
 
-  return Qnil;
+  return INT2NUM(p123Globals->mode);
 }
 void Init_mpg123_ruby(void) {
 
