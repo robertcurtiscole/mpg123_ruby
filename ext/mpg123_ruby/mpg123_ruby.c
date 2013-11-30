@@ -1,3 +1,8 @@
+/**
+ *  TODO:
+ *  config.h should be auto-generated.
+ *
+ **/
 // for a ruby gem
 #include <ruby.h>
 
@@ -5,6 +10,24 @@
 #include <stdio.h>
 #include <strings.h>
 #include <mpg123.h>
+#include "mpg123app.h"
+#include "mpg123.h"
+#include "local.h"
+
+#include <errno.h>
+#include <string.h>
+#include <time.h>
+
+#include "common.h"
+#include "getlopt.h"
+#include "buffer.h"
+#include "term.h"
+#include "playlist.h"
+#include "httpget.h"
+#include "metaprint.h"
+#include "streamdump.h"
+
+#include "debug.h"
 
 #include "pthread.h"
 
