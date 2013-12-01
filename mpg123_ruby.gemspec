@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.version       = Mpg123Ruby::VERSION
   spec.authors       = ["Curtis Cole"]
   spec.email         = ["RCurtisCole@gmail.com"]
-  spec.description   = "api to mpg123 library"
-  spec.summary       = "api to mpg123 library"
+  spec.description   = "api background thread running mpg123"
+  spec.summary       = "api to mpg123 library service"
   spec.homepage      = "http://www.github.com/robertcurtiscole/mpg123ruby"
   spec.license       = "MIT"
 

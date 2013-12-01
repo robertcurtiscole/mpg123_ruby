@@ -35,6 +35,7 @@
 #define MODE_PLAYING 1
 #define MODE_PAUSED 2
 
+#if 0
 void generic_sendmsg (const char *fmt, ...)
 {
   va_list ap;
@@ -43,6 +44,89 @@ void generic_sendmsg (const char *fmt, ...)
   va_end(ap);
   printf("\n");
 }
+#endif
+struct parameter param = { 
+  FALSE , /* aggressiv */
+  FALSE , /* shuffle */
+  FALSE , /* remote */
+  FALSE , /* remote to stderr */
+  DECODE_AUDIO , /* write samples to audio device */
+  FALSE , /* silent operation */
+  FALSE , /* xterm title on/off */
+  0 ,     /* second level buffer size */
+  0 ,     /* verbose level */
+  DEFAULT_OUTPUT_MODULE,  /* output module */
+  NULL,   /* output device */
+  0,      /* destination (headphones, ...) */
+#ifdef HAVE_TERMIOS
+  FALSE , /* term control */
+  MPG123_TERM_USR1,
+  MPG123_TERM_USR2,
+#endif
+  FALSE , /* checkrange */
+  0 ,   /* force_reopen, always (re)opens audio device for next song */
+  /* test_cpu flag is valid for multi and 3dnow.. even if 3dnow is built alone; ensure it appears only once */
+  FALSE , /* normal operation */
+  FALSE,  /* try to run process in 'realtime mode' */
+#ifdef HAVE_WINDOWS_H 
+  0, /* win32 process priority */
+#endif
+  NULL,  /* wav,cdr,au Filename */
+  0, /* default is to play all titles in playlist */
+  NULL, /* no playlist per default */
+  0 /* condensed id3 per default */
+  ,0 /* list_cpu */
+  ,NULL /* cpu */ 
+#ifdef FIFO
+  ,NULL
+#endif
+  ,0 /* timeout */
+  ,1 /* loop */
+  ,0 /* delay */
+  ,0 /* index */
+  /* Parameters for mpg123 handle, defaults are queried from library! */
+  ,0 /* down_sample */
+  ,0 /* rva */
+  ,0 /* halfspeed */
+  ,0 /* doublespeed */
+  ,0 /* start_frame */
+  ,-1 /* frame_number */
+  ,0 /* outscale */
+  ,0 /* flags */
+  ,0 /* force_rate */
+  ,1 /* ICY */
+  ,1024 /* resync_limit */
+  ,0 /* smooth */
+  ,0.0 /* pitch */
+  ,0 /* appflags */
+  ,NULL /* proxyurl */
+  ,0 /* keep_open */
+  ,0 /* force_utf8 */
+  ,INDEX_SIZE
+  ,NULL /* force_encoding */
+  ,1. /* preload */
+  ,-1 /* preframes */
+  ,-1 /* gain */
+  ,NULL /* stream dump file */
+  ,0 /* ICY interval */
+};
+
+int OutputDescriptor;   // an output file or I hope this is not used.
+off_t framenum;
+off_t frames_left;
+audio_output_t *ao = NULL;
+txfermem *buffermem = NULL;
+char *prgName = NULL;
+/* ThOr: pointers are not TRUE or FALSE */
+char *equalfile = NULL;
+struct httpdata htd;
+int fresh = TRUE;
+int have_output = FALSE; /* If we are past the output init step. */
+FILE* aux_out = NULL; /* Output for interesting information, normally on stdout to be parseable. */
+
+int buffer_fd[2];
+int buffer_pid;
+size_t bufferblock = 0;
 
 
 static void generic_sendv1(mpg123_id3v1 *v1, const char *prefix)
@@ -100,9 +184,37 @@ typedef struct mpg123_globals {
 /* this function is run by the second thread */
 void *PlayerThread(void *gPtr)
 {
-
-/* increment x to 100 */
+  int             result;
   sMPG123Globals   *p123Globals = (sMPG123Globals *) gPtr;
+
+  // wait for an event from the parent when we have a handle (or create one here)
+
+  result = mpg123_init();
+  if(result == MPG123_OK)
+  {
+    //if(init_output(&pMPG123Globals->ao) >= 0)
+
+      //mh = mpg123_parnew(mp, param.cpu, &result);
+      p123Globals->mh = mpg123_parnew(NULL, NULL, &result);
+      if(p123Globals->mh != NULL)
+      {
+          printf("PlayerThread passing control to generic loop\n");
+          control_generic(&p123Globals->mh);
+      }
+      else
+      {
+        printf("Crap! Cannot get a mpg123 handle: %s", mpg123_plain_strerror(result));
+        //safe_exit(77);
+      }
+
+  }
+  else
+  {
+    printf("Cannot initialize mpg123 library: %s", mpg123_plain_strerror(result));
+  }
+
+
+  /* increment x to 100 */
   int i = 0;
   for (i = 0; i < 100; i++) {
     sleep(1);
@@ -134,7 +246,6 @@ static void mpg123Ruby_free( void *p)
 
 VALUE mpg123Ruby_alloc(VALUE klass) {
   sMPG123Globals  *p123Globals = NULL;
-  int             result;
   VALUE           obj;
 
 	printf("new!\n");
@@ -145,29 +256,6 @@ VALUE mpg123Ruby_alloc(VALUE klass) {
   /* create a second thread which executes inc_x(&x) */
   if(pthread_create(&p123Globals->playerThread, NULL, PlayerThread, p123Globals)) {
     fprintf(stderr, "Error creating thread\n");
-  }
-
-  result = mpg123_init();
-  if(result == MPG123_OK)
-  {
-    //if(init_output(&pMPG123Globals->ao) >= 0)
-
-      //mh = mpg123_parnew(mp, param.cpu, &result);
-      p123Globals->mh = mpg123_parnew(NULL, NULL, &result);
-      if(p123Globals->mh != NULL)
-      {
-
-      }
-      else
-      {
-        printf("Crap! Cannot get a mpg123 handle: %s", mpg123_plain_strerror(result));
-        //safe_exit(77);
-      }
-
-  }
-  else
-  {
-    printf("Cannot initialize mpg123 library: %s", mpg123_plain_strerror(result));
   }
 
   return obj;

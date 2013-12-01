@@ -9,7 +9,7 @@ unless have_header('mpg123.h')
   exit
 end
 
-unless find_header('mpg123app.h', '../../../../ext/mpg123_ruby/include')
+unless find_header('mpg123app.h')
   puts "please install mpg123 extended headers"
   puts "rake build # then gem install"
   puts "gem install path-to-file.gem -- --with-mpg123_ruby-include=/path-to-gemsource/ext/mpg123_ruby/targetinc"
