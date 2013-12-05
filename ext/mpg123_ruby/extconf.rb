@@ -21,10 +21,11 @@ unless have_library('mpg123')
   exit
 end
 
-#unless find_header('include/compat.h')
-#	put "can't find compat.h"
-#	exit
-#end
+unless have_library('ltdl')
+  puts "please install ltdl lib"
+  exit
+end
 
+$CFLAGS << ' -DPKGLIBDIR="\"/usr/local/lib/mpg123\"" -DOPT_MULTI -DOPT_GENERIC -DOPT_GENERIC_DITHER -DOPT_I386 -DOPT_I586 -DOPT_I586_DITHER -DOPT_MMX -DOPT_3DNOW -DOPT_3DNOW_VINTAGE -DOPT_3DNOWEXT -DOPT_3DNOWEXT_VINTAGE -DOPT_SSE -DOPT_SSE_VINTAGE -DREAL_IS_FLOAT -DNEWOLD_WRITE_SAMPLE   -O2 -fomit-frame-pointer -funroll-all-loops -finline-functions -ffast-math '
 
 create_makefile(extension_name)    # mpg123_ruby/mpg123_ruby

@@ -27,7 +27,7 @@
 /* #undef DEBUG */
 
 /* The default audio output module(s) to use */
-#define DEFAULT_OUTPUT_MODULE "oss"
+#define DEFAULT_OUTPUT_MODULE "alsa,oss"
 
 /* Define if building with dynamcally linked libmpg123 */
 #define DYNAMIC_BUILD 1
@@ -120,7 +120,7 @@
 #define HAVE_LOCALE_H 1
 
 /* Define if libltdl is available */
-/* #undef HAVE_LTDL */
+#define HAVE_LTDL 1
 
 /* Define to 1 if you have the <machine/soundcard.h> header file. */
 /* #undef HAVE_MACHINE_SOUNDCARD_H */
@@ -369,7 +369,7 @@
 #define STDC_HEADERS 1
 
 /* Define if modules are enabled */
-/* #undef USE_MODULES */
+#define USE_MODULES 1
 
 /* Define for new Huffman decoding scheme. */
 #define USE_NEW_HUFFTABLE 1

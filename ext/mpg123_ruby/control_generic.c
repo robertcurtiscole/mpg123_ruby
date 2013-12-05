@@ -10,10 +10,8 @@
 #include "mpg123app.h"
 #include <stdarg.h>
 #include <ctype.h>
-#if !defined (WIN32) || defined (__CYGWIN__)
-#include <sys/wait.h>
-#include <sys/socket.h>
-#endif
+
+#include <pthread.h>
 #include <errno.h>
 #include <string.h>
 
@@ -28,17 +26,18 @@
 extern int buffer_pid;
 extern audio_output_t *ao;
 
+pthread_mutex_t new_cmd_ready = PTHREAD_MUTEX_INITIALIZER;
+char newurl[1024];
+char new_cmd = 0;			// need enum command list 
+
 #ifdef FIFO
 #include <sys/stat.h>
 int control_file = STDIN_FILENO;
 #else
 #define control_file STDIN_FILENO
-#ifdef WANT_WIN32_FIFO
-#error Control interface does not work on win32 stdin
-#endif /* WANT_WIN32_FIFO */
 #endif
 FILE *outstream;
-static int mode = MODE_STOPPED;
+int playerMode = MODE_STOPPED;
 static int init = 0;
 
 #include "debug.h"
@@ -100,8 +99,10 @@ void generic_sendstat (mpg123_handle *fr)
 {
 	off_t current_frame, frames_left;
 	double current_seconds, seconds_left;
+#if 0
 	if(!mpg123_position(fr, 0, xfermem_get_usedspace(buffermem), &current_frame, &frames_left, &current_seconds, &seconds_left))
 	generic_sendmsg("F %"OFF_P" %"OFF_P" %3.2f %3.2f", (off_p)current_frame, (off_p)frames_left, current_seconds, seconds_left);
+#endif
 }
 
 static void generic_sendv1(mpg123_id3v1 *v1, const char *prefix)
@@ -216,12 +217,12 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 	if(param.usebuffer)
 	{
 		buffer_resync();
-		if(mode == MODE_PAUSED && state != MODE_PAUSED) buffer_start();
+		if(playerMode == MODE_PAUSED && state != MODE_PAUSED) buffer_start();
 	}
-	if(mode != MODE_STOPPED)
+	if(playerMode != MODE_STOPPED)
 	{
 		close_track();
-		mode = MODE_STOPPED;
+		playerMode = MODE_STOPPED;
 	}
 	if(!open_track(arg))
 	{
@@ -239,9 +240,9 @@ static void generic_load(mpg123_handle *fr, char *arg, int state)
 	if(htd.icy_name.fill) generic_sendmsg("I ICY-NAME: %s", htd.icy_name.p);
 	if(htd.icy_url.fill)  generic_sendmsg("I ICY-URL: %s", htd.icy_url.p);
 
-	mode = state;
+	playerMode = state;
 	init = 1;
-	generic_sendmsg(mode == MODE_PAUSED ? "P 1" : "P 2");
+	generic_sendmsg(playerMode == MODE_PAUSED ? "P 1" : "P 2");
 }
 
 static void generic_loadlist(mpg123_handle *fr, char *arg)
@@ -288,6 +289,7 @@ int control_generic (mpg123_handle *fr)
 	struct timeval tv;
 	fd_set fds;
 	int n;
+	int attemps = 0;
 
 	/* ThOr */
 	char alive = 1;
@@ -320,20 +322,9 @@ int control_generic (mpg123_handle *fr)
 			error("You wanted an empty FIFO name??");
 			return 1;
 		}
-#ifndef WANT_WIN32_FIFO
-		unlink(param.fifo);
-		if(mkfifo(param.fifo, 0666) == -1)
-		{
-			error2("Failed to create FIFO at %s (%s)", param.fifo, strerror(errno));
-			return 1;
-		}
-		debug("going to open named pipe ... blocking until someone gives command");
-#endif /* WANT_WIN32_FIFO */
-#ifdef WANT_WIN32_FIFO
-		control_file = win32_fifo_mkfifo(param.fifo);
-#else
-		control_file = open(param.fifo,O_RDONLY);
-#endif /* WANT_WIN32_FIFO */
+		// open up commands - sync ready
+
+		//control_file = open(param.fifo,O_RDONLY);
 		debug("opened");
 	}
 #endif
@@ -342,15 +333,19 @@ int control_generic (mpg123_handle *fr)
 	{
 		tv.tv_sec = 0;
 		tv.tv_usec = 0;
+
 		FD_ZERO(&fds);
 		FD_SET(control_file, &fds);
 		/* play frame if no command needs to be processed */
-		if (mode == MODE_PLAYING) {
-#ifdef WANT_WIN32_FIFO
-			n = win32_fifo_read_peek(&tv);
-#else
-			n = select(32, &fds, NULL, NULL, &tv);
-#endif
+		if (playerMode == MODE_PLAYING) {
+			// is there a command ready?
+			// TODO
+			n = 0;
+			if (!pthread_mutex_trylock(&new_cmd_ready)) {	// return 0 on success = get lock = new command avail
+				n = 1;
+			}
+
+			//n = select(32, &fds, NULL, NULL, &tv);
 			if (n == 0) {
 				if (!play_frame())
 				{
@@ -358,14 +353,14 @@ int control_generic (mpg123_handle *fr)
 					   so there is a decision between stopping and pausing at the end. */
 					if(param.keep_open)
 					{
-						mode = MODE_PAUSED;
+						playerMode = MODE_PAUSED;
 						/* Hm, buffer should be stopped already, shouldn't it? */
 						if(param.usebuffer) buffer_stop();
 						generic_sendmsg("P 1");
 					}
 					else
 					{
-						mode = MODE_STOPPED;
+						playerMode = MODE_STOPPED;
 						close_track();
 						generic_sendmsg("P 0");
 					}
@@ -387,16 +382,21 @@ int control_generic (mpg123_handle *fr)
 				}
 			}
 		}
+		// else stopped.
 		else {
 			/* wait for command */
 			while (1) {
-#ifdef WANT_WIN32_FIFO
-				n = win32_fifo_read_peek(NULL);
-#else
-				n = select(32, &fds, NULL, NULL, NULL);
-#endif
-				if (n > 0)
-					break;
+				//
+				n = 0;
+				fprintf(outstream,"going to spin forever\n");
+				pthread_mutex_lock(&new_cmd_ready);
+				/*
+				 * get the command available
+				 */
+				if (new_cmd) {
+					n = 1;
+				}
+				break;
 			}
 		}
 
@@ -418,23 +418,25 @@ int control_generic (mpg123_handle *fr)
 
 			/* read as much as possible, maybe multiple commands */
 			/* When there is nothing to read (EOF) or even an error, it is the end */
-#ifdef WANT_WIN32_FIFO
-			len = win32_fifo_read(buf,REMOTE_BUFFER_SIZE);
-#else
-			len = read(control_file, buf, REMOTE_BUFFER_SIZE);
-#endif
+			// get next command.
+			// TODO
+			// len = read(control_file, buf, REMOTE_BUFFER_SIZE);
+			//strcpy(buf,"L /home/ccole/dev/AmpUp/device/webserver/music/GabCilmi.mp3\n");
+			strcpy(buf,newurl);
+			if (new_cmd == 'L')
+				{ generic_load(fr, newurl, MODE_PLAYING); continue; }
+
+			attemps++;
+			len = strlen(buf);
 			if(len < 1)
 			{
 #ifdef FIFO
 				if(len == 0 && param.fifo)
 				{
 					debug("fifo ended... reopening");
-#ifdef WANT_WIN32_FIFO
-					win32_fifo_mkfifo(param.fifo);
-#else
+					// todo fix re-sync
 					close(control_file);
 					control_file = open(param.fifo,O_RDONLY|O_NONBLOCK);
-#endif
 					if(control_file < 0){ error1("open of fifo failed... %s", strerror(errno)); break; }
 					continue;
 				}
@@ -466,14 +468,14 @@ int control_generic (mpg123_handle *fr)
 
 				/* PAUSE */
 				if (!strcasecmp(comstr, "P") || !strcasecmp(comstr, "PAUSE")) {
-					if(mode != MODE_STOPPED)
+					if(playerMode != MODE_STOPPED)
 					{	
-						if (mode == MODE_PLAYING) {
-							mode = MODE_PAUSED;
+						if (playerMode == MODE_PLAYING) {
+							playerMode = MODE_PAUSED;
 							if(param.usebuffer) buffer_stop();
 							generic_sendmsg("P 1");
 						} else {
-							mode = MODE_PLAYING;
+							playerMode = MODE_PLAYING;
 							if(param.usebuffer) buffer_start();
 							generic_sendmsg("P 2");
 						}
@@ -483,14 +485,14 @@ int control_generic (mpg123_handle *fr)
 
 				/* STOP */
 				if (!strcasecmp(comstr, "S") || !strcasecmp(comstr, "STOP")) {
-					if (mode != MODE_STOPPED) {
+					if (playerMode != MODE_STOPPED) {
 						if(param.usebuffer)
 						{
 							buffer_stop();
 							buffer_resync();
 						}
 						close_track();
-						mode = MODE_STOPPED;
+						playerMode = MODE_STOPPED;
 						generic_sendmsg("P 0");
 					} else generic_sendmsg("P 0");
 					continue;
@@ -510,7 +512,7 @@ int control_generic (mpg123_handle *fr)
 
 				if(!strcasecmp(comstr, "SCAN"))
 				{
-					if(mode != MODE_STOPPED)
+					if(playerMode != MODE_STOPPED)
 					{
 						if(mpg123_scan(fr) == MPG123_OK)
 						generic_sendmsg("SCAN done");
@@ -584,7 +586,7 @@ int control_generic (mpg123_handle *fr)
 					generic_sendmsg("H STOP/S: stop playback (closes file)");
 					generic_sendmsg("H JUMP/J <frame>|<+offset>|<-offset>|<[+|-]seconds>s: jump to mpeg frame <frame> or change position by offset, same in seconds if number followed by \"s\"");
 					generic_sendmsg("H VOLUME/V <percent>: set volume in % (0..100...); float value");
-					generic_sendmsg("H RVA off|(mix|radio)|(album|audiophile): set rva mode");
+					generic_sendmsg("H RVA off|(mix|radio)|(album|audiophile): set rva playerMode");
 					generic_sendmsg("H EQ/E <channel> <band> <value>: set equalizer value for frequency band 0 to 31 on channel %i (left) or %i (right) or %i (both)", MPG123_LEFT, MPG123_RIGHT, MPG123_LR);
 					generic_sendmsg("H EQFILE <filename>: load EQ settings from a file");
 					generic_sendmsg("H SHOWEQ: show all equalizer settings (as <channel> <band> <value> lines in a SHOWEQ block (like TAG))");
@@ -681,7 +683,7 @@ int control_generic (mpg123_handle *fr)
 						off_t newpos;
 						char *spos = arg;
 						int whence = SEEK_SET;
-						if(mode == MODE_STOPPED)
+						if(playerMode == MODE_STOPPED)
 						{
 							generic_sendmsg("E No track loaded!");
 							continue;
@@ -711,7 +713,7 @@ int control_generic (mpg123_handle *fr)
 						double secs;
 
 						spos = arg;
-						if(mode == MODE_STOPPED)
+						if(playerMode == MODE_STOPPED)
 						{
 							generic_sendmsg("E No track loaded!");
 							continue;
@@ -759,7 +761,7 @@ int control_generic (mpg123_handle *fr)
 						continue;
 					}
 
-					/* RVA mode */
+					/* RVA playerMode */
 					if(!strcasecmp(cmd, "RVA"))
 					{
 						if(!strcasecmp(arg, "off")) param.rva = MPG123_RVA_OFF;
@@ -815,12 +817,8 @@ int control_generic (mpg123_handle *fr)
 #endif
 	debug("closing control");
 #ifdef FIFO
-#if WANT_WIN32_FIFO
-	win32_fifo_close();
-#else
 	close(control_file); /* be it FIFO or STDIN */
 	if(param.fifo) unlink(param.fifo);
-#endif /* WANT_WIN32_FIFO */
 #endif
 	debug("control_generic returning");
 	return 0;
