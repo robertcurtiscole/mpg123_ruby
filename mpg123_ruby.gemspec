@@ -1,4 +1,5 @@
 # coding: utf-8
+# should this be removed since rubygem will manage the loadpath?
 lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'mpg123_ruby/version'
@@ -13,7 +14,12 @@ Gem::Specification.new do |spec|
   spec.homepage      = "http://www.github.com/robertcurtiscole/mpg123ruby"
   spec.license       = "MIT"
 
-  spec.files         = ['lib/mpg123-ruby.rb'] + Dir.glob("ext/**/*.{c,rb}")
+  # TODO: specify platforms where this works
+  #spec.platform
+
+  # should the spec.files only have the ruby file?  don't copy the others
+  #spec.files         = ['lib/mpg123-ruby.rb'] + Dir.glob("ext/**/*.{c,rb}") + Dir.glob("ext/**/maci686inc/*.h")
+  spec.files         = ['lib/mpg123-ruby.rb', 'lib/mpg123_ruby/version.rb']
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
