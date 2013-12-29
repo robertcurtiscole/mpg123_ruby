@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
 
   # should the spec.files only have the ruby file?  don't copy the others
   #spec.files         = ['lib/mpg123-ruby.rb'] + Dir.glob("ext/**/*.{c,rb}") + Dir.glob("ext/**/maci686inc/*.h")
-  spec.files         = ['lib/mpg123-ruby.rb', 'lib/mpg123_ruby/version.rb']
+  spec.files         = ['lib/mpg123-ruby.rb', 'lib/mpg123_ruby/version.rb'] + Dir.glob("ext/*/*.c") + Dir.glob("ext/mpg123_ruby/include/*.h")
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]

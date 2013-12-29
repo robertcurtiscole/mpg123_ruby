@@ -29,3 +29,12 @@ TODO: Write usage instructions here
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)
 5. Create new Pull Request
+
+## Developer notes
+# building:
+$ rake compile
+$ rake build
+$ rake install
+or
+$ gem build mpg123_ruby.gemspec
+$ gem install mpg123-ruby-0.0.2.gem

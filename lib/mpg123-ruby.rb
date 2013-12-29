@@ -1,5 +1,5 @@
 require "mpg123_ruby/version"
-require "mpg123_ruby/mpg123_ruby"
+require "mpg123_ruby"
 
 module Mpg123Ruby
     # Your code goes here...
