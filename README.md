@@ -38,3 +38,7 @@ $ rake install
 or
 $ gem build mpg123_ruby.gemspec
 $ gem install mpg123-ruby-0.0.2.gem
+
+!!! figure out dnow and 3dnow in mpg123_ruby.c:470
+
+!! use ruby 2.1.0 ??
