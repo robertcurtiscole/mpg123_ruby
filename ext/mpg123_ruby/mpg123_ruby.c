@@ -400,8 +400,15 @@ VALUE mpg123Ruby_state(VALUE self)
 // shuffle:
 // loopsong:
 // looplist:
-// frame:
-// num-frames:
+// position {...}
+//  frame:
+//  num-frames:
+//  seconds:
+//  num-seconds:
+// position stuff:
+//@F 5808 2361 151.72 61.68
+//@F 5809 2360 151.75 61.65
+//@F 5810 2359 151.77 61.62
 // song {....}
 /***
     track-name:   song:
@@ -418,8 +425,10 @@ VALUE mpg123Ruby_info(VALUE self)
   off_t           len;
   mpg123_id3v1 *v1;
   mpg123_id3v2 *v2;
+  off_t           current_frame, frames_left;
+  double          current_seconds, seconds_left;
 
-  // get the handle
+// get the handle
   Data_Get_Struct(self, sMPG123Globals, p123Globals);
 
   if (p123Globals == NULL)
@@ -428,15 +437,15 @@ VALUE mpg123Ruby_info(VALUE self)
   // get state of the player and return a hash
   rbHash = rb_hash_new();
   // player state
-  rb_hash_aset(rbHash, rb_str_new2("mode"),         INT2NUM(p123Globals->mode));
+  rb_hash_aset(rbHash, rb_str_new2("mode"),         INT2NUM(*p123Globals->mode));
   rb_hash_aset(rbHash, rb_str_new2("source-type"),  INT2NUM(0));
   rb_hash_aset(rbHash, rb_str_new2("source"),       rb_str_new2(newurl));
-
+#if 0
   pos = mpg123_tell(p123Globals->mh);
   len = mpg123_length(p123Globals->mh);
   rb_hash_aset(rbHash, rb_str_new2("frame"),        INT2NUM(pos));
   rb_hash_aset(rbHash, rb_str_new2("num-frames"),   INT2NUM(len));
-
+#endif
   rb_hash_aset(rbHash, rb_str_new2("volume"),       DBL2NUM(GetOutputVolume(p123Globals)));
   rb_hash_aset(rbHash, rb_str_new2("mute"),         INT2NUM(p123Globals->muted));
   
@@ -444,6 +453,19 @@ VALUE mpg123Ruby_info(VALUE self)
   rb_hash_aset(rbHash, rb_str_new2("loopsong"), INT2NUM(0));
   rb_hash_aset(rbHash, rb_str_new2("looplist"), INT2NUM(0));
 
+  // position info
+
+  if(!mpg123_position(p123Globals->mh, 0, xfermem_get_usedspace(buffermem), &current_frame, &frames_left, &current_seconds, &seconds_left)) 
+  {
+    VALUE positionHash = rb_hash_new();
+    //generic_sendmsg("F %"OFF_P" %"OFF_P" %3.2f %3.2f", (off_p)current_frame, (off_p)frames_left, current_seconds, seconds_left);
+    rb_hash_aset(positionHash, rb_str_new2("seconds"),      DBL2NUM(current_seconds));
+    rb_hash_aset(positionHash, rb_str_new2("num-seconds"),  DBL2NUM(current_seconds+seconds_left));
+    rb_hash_aset(positionHash, rb_str_new2("frame"),        INT2NUM(current_frame));
+    rb_hash_aset(positionHash, rb_str_new2("num-frames"),   INT2NUM(current_frame+frames_left));
+    rb_hash_aset(rbHash, rb_str_new2("position"), positionHash);
+  }
+ 
   // song info
   songHash = rb_hash_new();
   if(MPG123_OK == mpg123_id3(p123Globals->mh, &v1, &v2))

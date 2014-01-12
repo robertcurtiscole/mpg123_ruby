@@ -388,7 +388,7 @@ int control_generic (mpg123_handle *fr)
 			while (1) {
 				//
 				n = 0;
-				fprintf(outstream,"going to spin forever\n");
+				fprintf(outstream,"going to wait forever\n");
 				pthread_mutex_lock(&new_cmd_ready);
 				/*
 				 * get the command available
