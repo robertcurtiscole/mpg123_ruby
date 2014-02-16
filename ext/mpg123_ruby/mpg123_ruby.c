@@ -90,7 +90,7 @@ void *PlayerThread(void *gPtr)
 
       //mh = mpg123_parnew(mp, param.cpu, &result);
       p123Globals->mh = mpg123_parnew(NULL, NULL, &result);
-      p123Globals->mode = &playerMode;
+      p123Globals->mode = &player_mode;
       p123Globals->pnew_cmd_ready = &new_cmd_ready;
       pthread_mutex_trylock(&new_cmd_ready);   // init in locked state if it's not there already. (should do this outside.)
 
@@ -244,6 +244,8 @@ double GetOutputVolume(sMPG123Globals *p123Globals)
   return v;  
 }
 
+// set/get volume;  input/output volume is 0-100.
+// internally, volume is 0-1.0
 VALUE mpg123Ruby_volume(int argc, VALUE *argv, VALUE self)
 {
   double  v;
